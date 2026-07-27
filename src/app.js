@@ -23,6 +23,15 @@ app.get("/api/v1/health", (req, res) => {
 // --- Feature routes will be mounted here as we build them ---
 // app.use("/api/v1/auth", require("./routes/auth.routes"));
 
+// TEMPORARY - remove once real /auth routes exist (next increment)
+app.use("/api/v1/dev", require("./routes/dev.routes"));
+
+// TEMPORARY: dev-only routes for testing models before real auth exists.
+// Remove this block once /auth/register and /auth/login are built.
+if (process.env.NODE_ENV !== "production") {
+  app.use("/api/v1/dev", require("./routes/dev.routes"));
+}
+
 // --- 404 handler for unmatched routes ---
 app.use((req, res) => {
   res.status(404).json({ success: false, message: "Route not found" });
