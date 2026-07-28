@@ -4,10 +4,17 @@ const User = require("../models/User");
 const School = require("../models/School");
 const { generateAccessToken, generateRefreshToken } = require("../utils/generateToken");
 
+// The frontend now proxies /api/* through Vercel to Render (see the
+// frontend's vercel.json), so from the browser's point of view every
+// request is same-origin. That means the refresh cookie is first-party:
+// sameSite "lax" is safe and won't be blocked by Safari/mobile third-party
+// cookie rules the way "none" cross-site cookies can be. secure stays
+// hardcoded true (not gated on NODE_ENV) since this app is only ever
+// deployed over HTTPS.
 const cookieOptions = {
   httpOnly: true,
-  secure: process.env.NODE_ENV === "production",
-  sameSite: "none", // frontend (Vercel) and backend (Render) are different domains
+  secure: true,
+  sameSite: "lax",
   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
 };
 
@@ -154,4 +161,26 @@ const bootstrapSuperAdmin = asyncHandler(async (req, res) => {
   });
 });
 
-module.exports = { login, refresh, logout, bootstrapSuperAdmin };
+// GET /api/v1/auth/me  (protected)
+// Returns the current user's profile. Used on app load after a silent
+// refresh, so a page reload doesn't lose the user's name/role/etc.
+const getMe = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.user.userId);
+  if (!user) {
+    res.status(404);
+    throw new Error("User not found");
+  }
+
+  res.status(200).json({
+    success: true,
+    data: {
+      id: user._id,
+      fullName: user.fullName,
+      email: user.email,
+      role: user.role,
+      schoolId: user.schoolId,
+    },
+  });
+});
+
+module.exports = { login, refresh, logout, bootstrapSuperAdmin, getMe };
