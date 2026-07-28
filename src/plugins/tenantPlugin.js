@@ -23,10 +23,18 @@ module.exports = function tenantPlugin(schema) {
     },
   });
 
-  schema.statics.scoped = function (schoolId) {
+  schema.statics.scoped = function (schoolId, extraFilter = {}) {
     if (!schoolId) {
       throw new Error("scoped() called without a schoolId — tenant isolation broken");
     }
-    return this.find({ schoolId });
+    return this.find({ schoolId, ...extraFilter });
+  };
+
+  // Same idea, for counting (used alongside .scoped() for pagination totals)
+  schema.statics.scopedCount = function (schoolId, extraFilter = {}) {
+    if (!schoolId) {
+      throw new Error("scopedCount() called without a schoolId — tenant isolation broken");
+    }
+    return this.countDocuments({ schoolId, ...extraFilter });
   };
 };

@@ -23,6 +23,7 @@ app.get("/api/v1/health", (req, res) => {
 // --- Feature routes will be mounted here as we build them ---
 app.use("/api/v1/auth", require("./routes/auth.routes"));
 app.use("/api/v1/schools", require("./routes/school.routes"));
+app.use("/api/v1/students", require("./routes/student.routes"));
 
 // TEMPORARY: dev-only routes for testing models before real auth exists.
 // Remove this block once /auth/register and /auth/login are built.
@@ -33,6 +34,15 @@ if (process.env.NODE_ENV !== "production") {
 // --- 404 handler for unmatched routes ---
 app.use((req, res) => {
   res.status(404).json({ success: false, message: "Route not found" });
+});
+
+// --- Multer-specific errors (bad file type, too large) get a proper 400 ---
+const multer = require("multer");
+app.use((err, req, res, next) => {
+  if (err instanceof multer.MulterError || err.message?.includes("Only JPEG")) {
+    return res.status(400).json({ success: false, message: err.message });
+  }
+  next(err);
 });
 
 // --- Global error handler (must be last) ---
