@@ -118,4 +118,40 @@ const logout = asyncHandler(async (req, res) => {
   res.status(200).json({ success: true, message: "Logged out" });
 });
 
-module.exports = { login, refresh, logout };
+// POST /api/v1/auth/bootstrap-superadmin
+// One-time setup route: protected by a shared secret (not JWT, since no user
+// exists yet to log in as). Locks itself once a superadmin already exists.
+const bootstrapSuperAdmin = asyncHandler(async (req, res) => {
+  const setupKey = req.headers["x-setup-key"];
+  if (!setupKey || setupKey !== process.env.SUPERADMIN_SETUP_KEY) {
+    res.status(403);
+    throw new Error("Invalid or missing setup key");
+  }
+
+  const existingCount = await User.countDocuments({ role: "superadmin" });
+  if (existingCount > 0) {
+    res.status(403);
+    throw new Error("A superadmin already exists — this endpoint is now locked");
+  }
+
+  const { fullName, email, password } = req.body;
+  if (!fullName || !email || !password) {
+    res.status(400);
+    throw new Error("fullName, email and password are required");
+  }
+
+  const superadmin = await User.create({
+    fullName,
+    email: email.toLowerCase(),
+    password,
+    role: "superadmin",
+    schoolId: null,
+  });
+
+  res.status(201).json({
+    success: true,
+    data: { id: superadmin._id, fullName: superadmin.fullName, email: superadmin.email },
+  });
+});
+
+module.exports = { login, refresh, logout, bootstrapSuperAdmin };

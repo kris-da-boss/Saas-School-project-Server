@@ -22,18 +22,7 @@ app.get("/api/v1/health", (req, res) => {
 
 // --- Feature routes will be mounted here as we build them ---
 app.use("/api/v1/auth", require("./routes/auth.routes"));
-
-// TEMPORARY - remove once Admin's "create teacher/student/parent" feature exists (Phase 2)
-app.use("/api/v1/dev", require("./routes/dev.routes"));
-
-// TEMPORARY - proves the protect + tenantScope + rbac chain works end-to-end.
-// Delete once a real protected feature route exists.
-const protect = require("./middlewares/auth");
-const tenantScope = require("./middlewares/tenantScope");
-const requireRole = require("./middlewares/rbac");
-app.get("/api/v1/dev/whoami", protect, tenantScope, requireRole("admin", "superadmin"), (req, res) => {
-  res.status(200).json({ success: true, data: { user: req.user, schoolId: req.schoolId } });
-});
+app.use("/api/v1/schools", require("./routes/school.routes"));
 
 // TEMPORARY: dev-only routes for testing models before real auth exists.
 // Remove this block once /auth/register and /auth/login are built.
