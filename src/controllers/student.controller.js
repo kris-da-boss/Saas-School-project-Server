@@ -4,6 +4,7 @@ const User = require("../models/User");
 const StudentProfile = require("../models/StudentProfile");
 const cloudinary = require("../config/cloudinary");
 const uploadBufferToCloudinary = require("../utils/cloudinaryUpload");
+const detectImageType = require("../utils/detectImageType");
 const { buildPagination } = require("../utils/pagination");
 
 // POST /api/v1/students  (admin only, multipart/form-data)
@@ -22,6 +23,12 @@ const createStudent = asyncHandler(async (req, res) => {
   let photoUrl = "";
   let photoPublicId = "";
   if (req.file) {
+    const imageType = await detectImageType(req.file.buffer);
+    if (!imageType) {
+      res.status(400);
+      throw new Error("The uploaded file is not a valid image (JPEG, PNG, or WEBP)");
+    }
+
     const result = await uploadBufferToCloudinary(
       req.file.buffer,
       `schools/${req.schoolId}/students`
@@ -129,6 +136,12 @@ const updateStudent = asyncHandler(async (req, res) => {
   if (classId) student.classId = classId;
 
   if (req.file) {
+    const imageType = await detectImageType(req.file.buffer);
+    if (!imageType) {
+      res.status(400);
+      throw new Error("The uploaded file is not a valid image (JPEG, PNG, or WEBP)");
+    }
+
     const result = await uploadBufferToCloudinary(
       req.file.buffer,
       `schools/${req.schoolId}/students`
