@@ -25,18 +25,21 @@ app.use("/api/v1/auth", require("./routes/auth.routes"));
 app.use("/api/v1/schools", require("./routes/school.routes"));
 app.use("/api/v1/students", require("./routes/student.routes"));
 
+// TEMPORARY: dev-only routes for testing models before real auth exists.
+// Remove this block once /auth/register and /auth/login are built.
+if (process.env.NODE_ENV !== "production") {
+  app.use("/api/v1/dev", require("./routes/dev.routes"));
+}
+
 // --- 404 handler for unmatched routes ---
 app.use((req, res) => {
   res.status(404).json({ success: false, message: "Route not found" });
 });
 
-// --- Multer-specific errors (e.g. file too large) get a proper 400.
-// Image-type rejection now happens in controllers via detectImageType.js
-// and already sets res.status(400) itself, so it's handled by the normal
-// error handler below — no special-casing needed for it here. ---
+// --- Multer-specific errors (bad file type, too large) get a proper 400 ---
 const multer = require("multer");
 app.use((err, req, res, next) => {
-  if (err instanceof multer.MulterError) {
+  if (err instanceof multer.MulterError || err.message?.includes("Only JPEG")) {
     return res.status(400).json({ success: false, message: err.message });
   }
   next(err);
