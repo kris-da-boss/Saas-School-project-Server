@@ -5,11 +5,14 @@ const multer = require("multer");
 const storage = multer.memoryStorage();
 
 function fileFilter(req, file, cb) {
-  const allowed = ["image/jpeg", "image/png", "image/webp"];
-  if (allowed.includes(file.mimetype)) {
+  // Accept any image/* mimetype rather than a narrow allowlist. Real phone
+  // cameras/apps produce inconsistent mimetypes (image/heic on iPhones,
+  // occasionally non-standard "image/jpg" instead of "image/jpeg", etc.) —
+  // a strict allowlist rejects legitimate photos too often in practice.
+  if (file.mimetype.startsWith("image/")) {
     cb(null, true);
   } else {
-    cb(new Error("Only JPEG, PNG, or WEBP images are allowed"), false);
+    cb(new Error(`Unsupported file type: ${file.mimetype}. Please upload an image.`), false);
   }
 }
 
