@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const asyncHandler = require("express-async-handler");
 const User = require("../models/User");
 const StudentProfile = require("../models/StudentProfile");
+const Class = require("../models/Class");
 const cloudinary = require("../config/cloudinary");
 const uploadBufferToCloudinary = require("../utils/cloudinaryUpload");
 const detectImageType = require("../utils/detectImageType");
@@ -11,11 +12,24 @@ const { buildPagination } = require("../utils/pagination");
 // Creates BOTH the login User (role: student) and the StudentProfile,
 // in one transaction — same pattern as school onboarding.
 const createStudent = asyncHandler(async (req, res) => {
-  const { fullName, email, password, admissionNo, dob, gender, address } = req.body;
+  const { fullName, email, password, admissionNo, dob, gender, address, className } = req.body;
 
   if (!fullName || !email || !password || !admissionNo) {
     res.status(400);
     throw new Error("fullName, email, password and admissionNo are required");
+  }
+
+  // Optional class assignment at creation time - resolved from a class NAME
+  // (what an admin actually knows/types) rather than requiring the raw
+  // Mongo _id, same ergonomics as admission numbers elsewhere in the app.
+  let classId = null;
+  if (className) {
+    const classDoc = await Class.findOne({ schoolId: req.schoolId, name: className });
+    if (!classDoc) {
+      res.status(404);
+      throw new Error(`No class named "${className}" was found at this school`);
+    }
+    classId = classDoc._id;
   }
 
   // Cloudinary isn't part of the Mongo transaction, so we upload FIRST.
@@ -56,6 +70,7 @@ const createStudent = asyncHandler(async (req, res) => {
           dob: dob || undefined,
           gender: gender || undefined,
           address,
+          classId,
           photoUrl,
           photoPublicId,
         },
@@ -99,7 +114,11 @@ const getStudents = asyncHandler(async (req, res) => {
   }
 
   const [students, total] = await Promise.all([
-    StudentProfile.scoped(req.schoolId, filter).sort({ fullName: 1 }).skip(skip).limit(limit),
+    StudentProfile.scoped(req.schoolId, filter)
+      .populate("classId", "name")
+      .sort({ fullName: 1 })
+      .skip(skip)
+      .limit(limit),
     StudentProfile.scopedCount(req.schoolId, filter),
   ]);
 
@@ -128,12 +147,27 @@ const updateStudent = asyncHandler(async (req, res) => {
     throw new Error("Student not found");
   }
 
-  const { fullName, dob, gender, address, classId } = req.body;
+  const { fullName, dob, gender, address, className } = req.body;
   if (fullName) student.fullName = fullName;
   if (dob) student.dob = dob;
   if (gender) student.gender = gender;
   if (address) student.address = address;
-  if (classId) student.classId = classId;
+
+  // Only touch class assignment if the field was actually sent. An empty
+  // string means "unassign from any class"; a non-empty name gets resolved
+  // the same way as on create.
+  if (className !== undefined) {
+    if (className === "") {
+      student.classId = null;
+    } else {
+      const classDoc = await Class.findOne({ schoolId: req.schoolId, name: className });
+      if (!classDoc) {
+        res.status(404);
+        throw new Error(`No class named "${className}" was found at this school`);
+      }
+      student.classId = classDoc._id;
+    }
+  }
 
   if (req.file) {
     const imageType = await detectImageType(req.file.buffer);
