@@ -6,26 +6,33 @@ const { buildPagination } = require("../utils/pagination");
 
 // POST /api/v1/classes  (admin only)
 const createClass = asyncHandler(async (req, res) => {
-  const { name, classTeacherId, capacity } = req.body;
+  const { name, classTeacherStaffId, capacity } = req.body;
 
   if (!name) {
     res.status(400);
     throw new Error("name is required");
   }
 
-  if (classTeacherId) {
-    const teacher = await TeacherProfile.findOne({ _id: classTeacherId, schoolId: req.schoolId });
+  // Resolved from the teacher's staff ID (what an admin actually has in
+  // front of them) rather than requiring the raw Mongo _id.
+  let classTeacherId = null;
+  if (classTeacherStaffId) {
+    const teacher = await TeacherProfile.findOne({
+      schoolId: req.schoolId,
+      staffId: classTeacherStaffId,
+    });
     if (!teacher) {
       res.status(404);
-      throw new Error("classTeacherId does not match any teacher at this school");
+      throw new Error(`No teacher with staff ID "${classTeacherStaffId}" was found at this school`);
     }
+    classTeacherId = teacher._id;
   }
 
   try {
     const newClass = await Class.create({
       schoolId: req.schoolId,
       name,
-      classTeacherId: classTeacherId || null,
+      classTeacherId,
       capacity: capacity || null,
     });
     res.status(201).json({ success: true, data: newClass });
@@ -49,7 +56,7 @@ const getClasses = asyncHandler(async (req, res) => {
 
   const [classes, total] = await Promise.all([
     Class.scoped(req.schoolId, filter)
-      .populate("classTeacherId", "fullName")
+      .populate("classTeacherId", "fullName staffId")
       .sort({ name: 1 })
       .skip(skip)
       .limit(limit),
@@ -82,7 +89,7 @@ const getClasses = asyncHandler(async (req, res) => {
 const getClassById = asyncHandler(async (req, res) => {
   const classDoc = await Class.findOne({ _id: req.params.id, schoolId: req.schoolId }).populate(
     "classTeacherId",
-    "fullName"
+    "fullName staffId"
   );
   if (!classDoc) {
     res.status(404);
@@ -109,17 +116,22 @@ const updateClass = asyncHandler(async (req, res) => {
     throw new Error("Class not found");
   }
 
-  const { name, classTeacherId, capacity } = req.body;
+  const { name, classTeacherStaffId, capacity } = req.body;
 
-  if (classTeacherId !== undefined) {
-    if (classTeacherId) {
-      const teacher = await TeacherProfile.findOne({ _id: classTeacherId, schoolId: req.schoolId });
+  if (classTeacherStaffId !== undefined) {
+    if (classTeacherStaffId === "") {
+      classDoc.classTeacherId = null;
+    } else {
+      const teacher = await TeacherProfile.findOne({
+        schoolId: req.schoolId,
+        staffId: classTeacherStaffId,
+      });
       if (!teacher) {
         res.status(404);
-        throw new Error("classTeacherId does not match any teacher at this school");
+        throw new Error(`No teacher with staff ID "${classTeacherStaffId}" was found at this school`);
       }
+      classDoc.classTeacherId = teacher._id;
     }
-    classDoc.classTeacherId = classTeacherId || null;
   }
 
   if (name) classDoc.name = name;
