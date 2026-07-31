@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const asyncHandler = require("express-async-handler");
 const Class = require("../models/Class");
 const TeacherProfile = require("../models/TeacherProfile");
@@ -67,8 +68,14 @@ const getClasses = asyncHandler(async (req, res) => {
   // looping and running StudentProfile.countDocuments() once per class
   // (which would be an N+1 query problem — slow and wasteful at scale).
   const classIds = classes.map((c) => c._id);
+  // req.schoolId is a STRING here (JWTs serialize ObjectId to plain text).
+  // .find() auto-casts query filters to the schema's real types for you,
+  // but .aggregate() talks to MongoDB directly and skips that casting -
+  // comparing a string to a stored ObjectId matches nothing. We have to
+  // convert it explicitly for aggregation pipelines specifically.
+  const schoolObjectId = new mongoose.Types.ObjectId(req.schoolId);
   const counts = await StudentProfile.aggregate([
-    { $match: { schoolId: req.schoolId, classId: { $in: classIds }, isActive: true } },
+    { $match: { schoolId: schoolObjectId, classId: { $in: classIds }, isActive: true } },
     { $group: { _id: "$classId", count: { $sum: 1 } } },
   ]);
   const countMap = Object.fromEntries(counts.map((c) => [c._id.toString(), c.count]));
