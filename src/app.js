@@ -29,6 +29,9 @@ app.use("/api/v1/parents", require("./routes/parent.routes"));
 app.use("/api/v1/classes", require("./routes/class.routes"));
 app.use("/api/v1/subjects", require("./routes/subject.routes"));
 app.use("/api/v1/timetables", require("./routes/timetable.routes"));
+app.use("/api/v1/attendance", require("./routes/attendance.routes"));
+app.use("/api/v1/assignments", require("./routes/assignment.routes"));
+app.use("/api/v1/submissions", require("./routes/submission.routes"));
 
 // --- 404 handler for unmatched routes ---
 app.use((req, res) => {
