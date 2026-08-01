@@ -2,8 +2,31 @@ const asyncHandler = require("express-async-handler");
 const Attendance = require("../models/Attendance");
 const Class = require("../models/Class");
 const StudentProfile = require("../models/StudentProfile");
+const { getOwnTeacherProfile, getTeacherClassIds } = require("../utils/teacherAccess");
 
 const STATUSES = ["present", "absent", "late", "excused"];
+
+// Admins can act on any class. Teachers can only act on classes they're
+// actually assigned to (homeroom or timetabled) - this is the difference
+// between "does this role have this permission" (RBAC, checked by
+// requireRole in the route) and "does THIS SPECIFIC user own THIS SPECIFIC
+// resource" (checked here). Skipping this second check would let any
+// teacher mark attendance for any class in the school, not just their own.
+async function assertClassAccess(req, res, classDoc) {
+  if (req.user.role !== "teacher") return;
+
+  const teacherProfile = await getOwnTeacherProfile(req);
+  if (!teacherProfile) {
+    res.status(404);
+    throw new Error("Teacher profile not found for this account");
+  }
+
+  const allowedClassIds = await getTeacherClassIds(req.schoolId, teacherProfile._id);
+  if (!allowedClassIds.includes(classDoc._id.toString())) {
+    res.status(403);
+    throw new Error("You are not assigned to this class");
+  }
+}
 
 // Normalizes any date input to UTC midnight, so "2024-05-01" always maps to
 // the exact same stored value regardless of what time component (if any)
@@ -32,6 +55,7 @@ const getAttendanceForDate = asyncHandler(async (req, res) => {
     res.status(404);
     throw new Error("Class not found");
   }
+  await assertClassAccess(req, res, classDoc);
 
   const roster = await StudentProfile.find({
     schoolId: req.schoolId,
@@ -86,6 +110,7 @@ const markAttendance = asyncHandler(async (req, res) => {
     res.status(404);
     throw new Error("Class not found");
   }
+  await assertClassAccess(req, res, classDoc);
 
   // Never trust student IDs blindly - confirm every one actually belongs to
   // this class at this school before recording anything against them.

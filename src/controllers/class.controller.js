@@ -3,7 +3,26 @@ const asyncHandler = require("express-async-handler");
 const Class = require("../models/Class");
 const TeacherProfile = require("../models/TeacherProfile");
 const StudentProfile = require("../models/StudentProfile");
+const { getOwnTeacherProfile, getTeacherClassIds } = require("../utils/teacherAccess");
 const { buildPagination } = require("../utils/pagination");
+
+// GET /api/v1/classes/mine  (teacher only)
+// Classes this teacher is either the homeroom teacher for, or teaches at
+// least one lesson in per the timetable.
+const getMyClasses = asyncHandler(async (req, res) => {
+  const teacherProfile = await getOwnTeacherProfile(req);
+  if (!teacherProfile) {
+    res.status(404);
+    throw new Error("Teacher profile not found for this account");
+  }
+
+  const classIds = await getTeacherClassIds(req.schoolId, teacherProfile._id);
+  const classes = await Class.find({ _id: { $in: classIds }, schoolId: req.schoolId, isActive: true })
+    .populate("classTeacherId", "fullName")
+    .sort({ name: 1 });
+
+  res.status(200).json({ success: true, data: classes });
+});
 
 // POST /api/v1/classes  (admin only)
 const createClass = asyncHandler(async (req, res) => {
@@ -185,4 +204,4 @@ const deactivateClass = asyncHandler(async (req, res) => {
   res.status(200).json({ success: true, message: "Class deactivated" });
 });
 
-module.exports = { createClass, getClasses, getClassById, updateClass, deactivateClass };
+module.exports = { createClass, getClasses, getClassById, updateClass, deactivateClass, getMyClasses };

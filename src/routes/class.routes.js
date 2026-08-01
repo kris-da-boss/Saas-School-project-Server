@@ -8,12 +8,16 @@ const {
   getClassById,
   updateClass,
   deactivateClass,
+  getMyClasses,
 } = require("../controllers/class.controller");
 
 const router = express.Router();
 
 router.use(protect, tenantScope);
 
+// IMPORTANT: /mine must be registered before /:id - otherwise Express
+// matches "mine" as the :id parameter instead of this specific route.
+router.get("/mine", requireRole("teacher"), getMyClasses);
 router.get("/", requireRole("admin", "teacher"), getClasses);
 router.get("/:id", requireRole("admin", "teacher"), getClassById);
 router.post("/", requireRole("admin"), createClass);

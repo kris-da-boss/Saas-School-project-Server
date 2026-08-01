@@ -4,7 +4,28 @@ const Submission = require("../models/Submission");
 const Class = require("../models/Class");
 const Subject = require("../models/Subject");
 const StudentProfile = require("../models/StudentProfile");
+const { getOwnTeacherProfile, getTeacherClassIds } = require("../utils/teacherAccess");
 const { buildPagination } = require("../utils/pagination");
+
+// Same reasoning as attendance.controller.js: requireRole("teacher") on the
+// route only proves this user IS a teacher, not that they own THIS class.
+// Admins skip this check entirely.
+async function assertClassAccess(req, res, classId) {
+  if (req.user.role !== "teacher") return null;
+
+  const teacherProfile = await getOwnTeacherProfile(req);
+  if (!teacherProfile) {
+    res.status(404);
+    throw new Error("Teacher profile not found for this account");
+  }
+
+  const allowedClassIds = await getTeacherClassIds(req.schoolId, teacherProfile._id);
+  if (!allowedClassIds.includes(classId.toString())) {
+    res.status(403);
+    throw new Error("You are not assigned to this class");
+  }
+  return allowedClassIds;
+}
 
 // POST /api/v1/assignments  (admin, teacher)
 const createAssignment = asyncHandler(async (req, res) => {
@@ -20,6 +41,7 @@ const createAssignment = asyncHandler(async (req, res) => {
     res.status(404);
     throw new Error("Class not found");
   }
+  await assertClassAccess(req, res, classDoc._id);
 
   const subject = await Subject.findOne({ _id: subjectId, schoolId: req.schoolId });
   if (!subject) {
@@ -48,8 +70,30 @@ const getAssignments = asyncHandler(async (req, res) => {
   const { page, limit, skip } = buildPagination(req.query);
 
   const filter = { isActive: true };
-  if (req.query.classId) filter.classId = req.query.classId;
   if (req.query.search) filter.title = new RegExp(req.query.search.trim(), "i");
+
+  if (req.user.role === "teacher") {
+    const teacherProfile = await getOwnTeacherProfile(req);
+    if (!teacherProfile) {
+      res.status(404);
+      throw new Error("Teacher profile not found for this account");
+    }
+    const myClassIds = await getTeacherClassIds(req.schoolId, teacherProfile._id);
+
+    // An explicit ?classId= is only honored if it's actually one of theirs -
+    // otherwise silently ignoring it could leak that a class exists.
+    if (req.query.classId) {
+      if (!myClassIds.includes(req.query.classId)) {
+        res.status(403);
+        throw new Error("You are not assigned to this class");
+      }
+      filter.classId = req.query.classId;
+    } else {
+      filter.classId = { $in: myClassIds };
+    }
+  } else if (req.query.classId) {
+    filter.classId = req.query.classId;
+  }
 
   const [assignments, total] = await Promise.all([
     Assignment.scoped(req.schoolId, filter)
@@ -87,6 +131,7 @@ const updateAssignment = asyncHandler(async (req, res) => {
     res.status(404);
     throw new Error("Assignment not found");
   }
+  await assertClassAccess(req, res, assignment.classId);
 
   const { title, description, dueDate } = req.body;
   if (title) assignment.title = title;
@@ -104,6 +149,7 @@ const deactivateAssignment = asyncHandler(async (req, res) => {
     res.status(404);
     throw new Error("Assignment not found");
   }
+  await assertClassAccess(req, res, assignment.classId);
   assignment.isActive = false;
   await assignment.save();
   res.status(200).json({ success: true, message: "Assignment deactivated" });
@@ -118,6 +164,7 @@ const getAssignmentRoster = asyncHandler(async (req, res) => {
     res.status(404);
     throw new Error("Assignment not found");
   }
+  await assertClassAccess(req, res, assignment.classId);
 
   const roster = await StudentProfile.find({
     schoolId: req.schoolId,
@@ -156,6 +203,7 @@ const gradeSubmission = asyncHandler(async (req, res) => {
     res.status(404);
     throw new Error("Assignment not found");
   }
+  await assertClassAccess(req, res, assignment.classId);
 
   const { studentId, grade, feedback } = req.body;
   if (!studentId) {
