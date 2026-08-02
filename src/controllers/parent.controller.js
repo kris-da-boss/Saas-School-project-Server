@@ -233,10 +233,28 @@ const deactivateParent = asyncHandler(async (req, res) => {
   res.status(200).json({ success: true, message: "Parent deactivated" });
 });
 
+// GET /api/v1/parents/mine  (parent only)
+// Resolves the calling parent's own profile and children - a parent's JWT
+// only carries userId/role/schoolId, same resolve-from-userId pattern used
+// for students and teachers elsewhere.
+const getMyChildren = asyncHandler(async (req, res) => {
+  const parent = await ParentProfile.findOne({ schoolId: req.schoolId, userId: req.user.userId }).populate(
+    "childrenIds",
+    "fullName admissionNo photoUrl classId"
+  );
+  if (!parent) {
+    res.status(404);
+    throw new Error("Parent profile not found for this account");
+  }
+
+  res.status(200).json({ success: true, data: parent.childrenIds });
+});
+
 module.exports = {
   createParent,
   getParents,
   getParentById,
   updateParent,
   deactivateParent,
+  getMyChildren,
 };
