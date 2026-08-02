@@ -23,6 +23,71 @@ async function assertClassAccess(req, res, classId) {
   }
 }
 
+// POST /api/v1/exams/bulk  (admin, teacher)
+// Body: { classId, term, session, subjects: [{ subjectId, examDate, maxScore }] }
+// Creates every subject's exam sitting in ONE request instead of requiring
+// class/term/session to be re-typed per subject. Uses upsert, so calling
+// this again for the same class/term/session (e.g. adding one more subject
+// later) updates rather than errors on the duplicate-key index.
+const bulkCreateExams = asyncHandler(async (req, res) => {
+  const { classId, term, session, subjects } = req.body;
+
+  if (!classId || !term || !session || !Array.isArray(subjects) || subjects.length === 0) {
+    res.status(400);
+    throw new Error("classId, term, session and a non-empty subjects array are required");
+  }
+
+  const classDoc = await Class.findOne({ _id: classId, schoolId: req.schoolId });
+  if (!classDoc) {
+    res.status(404);
+    throw new Error("Class not found");
+  }
+  await assertClassAccess(req, res, classDoc._id);
+
+  // Confirm every subject listed is actually assigned to this class - same
+  // integrity rule as single exam creation, just checked for the whole
+  // batch at once.
+  const subjectIds = subjects.map((s) => s.subjectId);
+  const validSubjects = await Subject.find({
+    _id: { $in: subjectIds },
+    schoolId: req.schoolId,
+    classIds: classDoc._id,
+  });
+  if (validSubjects.length !== subjectIds.length) {
+    res.status(409);
+    throw new Error("One or more subjects are not assigned to this class");
+  }
+
+  const ops = subjects.map((s) => ({
+    updateOne: {
+      filter: { schoolId: req.schoolId, classId: classDoc._id, subjectId: s.subjectId, term, session },
+      update: {
+        $set: {
+          schoolId: req.schoolId,
+          classId: classDoc._id,
+          subjectId: s.subjectId,
+          term,
+          session,
+          name: `${term} Examination`,
+          maxScore: s.maxScore || 100,
+          examDate: s.examDate || undefined,
+          isActive: true,
+        },
+      },
+      upsert: true,
+    },
+  }));
+
+  await Exam.bulkWrite(ops);
+
+  const exams = await Exam.find({ schoolId: req.schoolId, classId: classDoc._id, term, session }).populate(
+    "subjectId",
+    "name code"
+  );
+
+  res.status(201).json({ success: true, data: exams });
+});
+
 // POST /api/v1/exams  (admin, teacher)
 const createExam = asyncHandler(async (req, res) => {
   const { name, term, session, classId, subjectId, maxScore, examDate } = req.body;
@@ -143,4 +208,11 @@ const deactivateExam = asyncHandler(async (req, res) => {
   res.status(200).json({ success: true, message: "Exam deactivated" });
 });
 
-module.exports = { createExam, getExams, getExamById, deactivateExam, assertClassAccess };
+module.exports = {
+  createExam,
+  bulkCreateExams,
+  getExams,
+  getExamById,
+  deactivateExam,
+  assertClassAccess,
+};
