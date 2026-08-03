@@ -88,4 +88,20 @@ const getSchoolBySubdomain = asyncHandler(async (req, res) => {
   res.status(200).json({ success: true, data: school });
 });
 
-module.exports = { createSchool, getSchoolBySubdomain };
+// GET /api/v1/schools/mine  (any authenticated role)
+// A logged-in user's own school branding - used for headers, report cards,
+// etc. Superadmin has no single school, so this is for everyone else.
+const getMySchool = asyncHandler(async (req, res) => {
+  if (!req.schoolId) {
+    res.status(400);
+    throw new Error("This account is not associated with a single school");
+  }
+  const school = await School.findById(req.schoolId).select("name logoUrl themeColor");
+  if (!school) {
+    res.status(404);
+    throw new Error("School not found");
+  }
+  res.status(200).json({ success: true, data: school });
+});
+
+module.exports = { createSchool, getSchoolBySubdomain, getMySchool };

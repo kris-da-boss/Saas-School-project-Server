@@ -8,6 +8,7 @@ const {
   getExams,
   getExamById,
   deactivateExam,
+  getTermDates,
 } = require("../controllers/exam.controller");
 const { getExamRoster, submitResults } = require("../controllers/result.controller");
 
@@ -15,6 +16,9 @@ const router = express.Router();
 
 router.use(protect, tenantScope);
 
+// IMPORTANT: /term must come before /:id - same Express ordering trap as
+// /classes/mine and /parents/mine.
+router.get("/term", requireRole("admin", "teacher"), getTermDates);
 router.get("/", requireRole("admin", "teacher"), getExams);
 router.get("/:id", requireRole("admin", "teacher"), getExamById);
 router.post("/", requireRole("admin", "teacher"), createExam);

@@ -13,8 +13,12 @@ const resultSchema = new mongoose.Schema(
     subjectId: { type: mongoose.Schema.Types.ObjectId, ref: "Subject", required: true },
     term: { type: String, required: true },
     session: { type: String, required: true },
+    // Standard school report card breakdown: CA (continuous assessment,
+    // e.g. class tests/homework) is scored separately from the exam itself.
+    // "score" here is the EXAM component only; total = caScore + score.
+    caScore: { type: Number, default: 0, min: 0 },
     score: { type: Number, required: true, min: 0 },
-    maxScore: { type: Number, required: true },
+    maxScore: { type: Number, required: true }, // max for the TOTAL (CA + exam combined)
     grade: { type: String },
     remark: { type: String },
   },

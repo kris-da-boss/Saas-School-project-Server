@@ -7,6 +7,7 @@ const {
   downloadReportCardPdf,
   getMyReportCard,
   downloadMyReportCardPdf,
+  saveReportCardRemarks,
 } = require("../controllers/result.controller");
 
 const router = express.Router();
@@ -32,6 +33,11 @@ router.get(
   "/report-card/:studentId/pdf",
   requireRole("admin", "teacher", "student", "parent"),
   downloadReportCardPdf
+);
+router.patch(
+  "/report-card/:studentId/remarks",
+  requireRole("admin", "teacher"),
+  saveReportCardRemarks
 );
 
 module.exports = router;

@@ -2,6 +2,7 @@ const asyncHandler = require("express-async-handler");
 const Exam = require("../models/Exam");
 const Class = require("../models/Class");
 const Subject = require("../models/Subject");
+const Term = require("../models/Term");
 const { getOwnTeacherProfile, getTeacherClassIds } = require("../utils/teacherAccess");
 const { buildPagination } = require("../utils/pagination");
 
@@ -30,7 +31,7 @@ async function assertClassAccess(req, res, classId) {
 // this again for the same class/term/session (e.g. adding one more subject
 // later) updates rather than errors on the duplicate-key index.
 const bulkCreateExams = asyncHandler(async (req, res) => {
-  const { classId, term, session, subjects } = req.body;
+  const { classId, term, session, subjects, termStartDate, termEndDate } = req.body;
 
   if (!classId || !term || !session || !Array.isArray(subjects) || subjects.length === 0) {
     res.status(400);
@@ -69,6 +70,7 @@ const bulkCreateExams = asyncHandler(async (req, res) => {
           term,
           session,
           name: `${term} Examination`,
+          maxCA: s.maxCA || 40,
           maxScore: s.maxScore || 100,
           examDate: s.examDate || undefined,
           isActive: true,
@@ -80,6 +82,17 @@ const bulkCreateExams = asyncHandler(async (req, res) => {
 
   await Exam.bulkWrite(ops);
 
+  // Term date range is school-wide (not per-class), so only upsert it if
+  // dates were actually provided - a class that reschedules doesn't need
+  // to touch the whole school's term boundaries.
+  if (termStartDate && termEndDate) {
+    await Term.updateOne(
+      { schoolId: req.schoolId, term, session },
+      { $set: { schoolId: req.schoolId, term, session, startDate: termStartDate, endDate: termEndDate } },
+      { upsert: true }
+    );
+  }
+
   const exams = await Exam.find({ schoolId: req.schoolId, classId: classDoc._id, term, session }).populate(
     "subjectId",
     "name code"
@@ -88,9 +101,24 @@ const bulkCreateExams = asyncHandler(async (req, res) => {
   res.status(201).json({ success: true, data: exams });
 });
 
+// GET /api/v1/exams/term?term=&session=  (admin, teacher)
+// Fetches an existing term's date range, if one has been set - used by the
+// frontend to pre-fill the term-dates fields when scheduling exams for a
+// term that's already been dated via a different class.
+const getTermDates = asyncHandler(async (req, res) => {
+  const { term, session } = req.query;
+  if (!term || !session) {
+    res.status(400);
+    throw new Error("term and session query parameters are required");
+  }
+
+  const termDoc = await Term.findOne({ schoolId: req.schoolId, term, session });
+  res.status(200).json({ success: true, data: termDoc });
+});
+
 // POST /api/v1/exams  (admin, teacher)
 const createExam = asyncHandler(async (req, res) => {
-  const { name, term, session, classId, subjectId, maxScore, examDate } = req.body;
+  const { name, term, session, classId, subjectId, maxCA, maxScore, examDate } = req.body;
 
   if (!name || !term || !session || !classId || !subjectId) {
     res.status(400);
@@ -122,6 +150,7 @@ const createExam = asyncHandler(async (req, res) => {
       session,
       classId,
       subjectId,
+      maxCA: maxCA || 40,
       maxScore: maxScore || 100,
       examDate: examDate || undefined,
     });
@@ -214,5 +243,6 @@ module.exports = {
   getExams,
   getExamById,
   deactivateExam,
+  getTermDates,
   assertClassAccess,
 };

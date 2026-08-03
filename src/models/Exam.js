@@ -10,6 +10,10 @@ const examSchema = new mongoose.Schema(
     session: { type: String, required: true, trim: true }, // e.g. "2025/2026"
     classId: { type: mongoose.Schema.Types.ObjectId, ref: "Class", required: true },
     subjectId: { type: mongoose.Schema.Types.ObjectId, ref: "Subject", required: true },
+    // Standard report card breakdown: maxScore is the COMBINED total (e.g.
+    // 100); maxCA is how much of that total the CA (continuous assessment)
+    // portion is worth (e.g. 40, leaving 60 for the exam itself).
+    maxCA: { type: Number, default: 40 },
     maxScore: { type: Number, default: 100 },
     examDate: { type: Date },
     isActive: { type: Boolean, default: true },

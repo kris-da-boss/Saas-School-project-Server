@@ -34,6 +34,7 @@ app.use("/api/v1/assignments", require("./routes/assignment.routes"));
 app.use("/api/v1/submissions", require("./routes/submission.routes"));
 app.use("/api/v1/exams", require("./routes/exam.routes"));
 app.use("/api/v1/results", require("./routes/result.routes"));
+app.use("/api/v1/terms", require("./routes/term.routes"));
 
 // --- 404 handler for unmatched routes ---
 app.use((req, res) => {

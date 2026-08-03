@@ -77,7 +77,14 @@ const getAttendanceForDate = asyncHandler(async (req, res) => {
 
   res.status(200).json({
     success: true,
-    data: { date, classId: classDoc._id, roster: rosterWithStatus, alreadyMarked: !!attendance },
+    data: {
+      date,
+      classId: classDoc._id,
+      roster: rosterWithStatus,
+      alreadyMarked: !!attendance,
+      term: attendance?.term || null,
+      session: attendance?.session || null,
+    },
   });
 });
 
@@ -125,12 +132,19 @@ const markAttendance = asyncHandler(async (req, res) => {
     throw new Error("One or more students do not belong to this class");
   }
 
+  // term/session are optional, but tagging them is what lets a report card
+  // later compute a real "X of Y days present" summary for that term,
+  // instead of every attendance record being un-attributable to any term.
+  const { term, session } = req.body;
+
   const attendance = await Attendance.findOneAndUpdate(
     { schoolId: req.schoolId, classId: classDoc._id, date },
     {
       schoolId: req.schoolId,
       classId: classDoc._id,
       date,
+      term: term || null,
+      session: session || null,
       records: records.map((r) => ({ studentId: r.studentId, status: r.status })),
       markedBy: req.user.userId,
     },
