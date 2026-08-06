@@ -4,6 +4,7 @@ const tenantScope = require("../middlewares/tenantScope");
 const requireRole = require("../middlewares/rbac");
 const {
   getTimetableForClass,
+  getMyTimetable,
   addEntry,
   updateEntry,
   deleteEntry,
@@ -13,6 +14,7 @@ const router = express.Router();
 
 router.use(protect, tenantScope);
 
+router.get("/mine", requireRole("student"), getMyTimetable);
 router.get("/class/:classId", requireRole("admin", "teacher"), getTimetableForClass);
 router.post("/class/:classId/entries", requireRole("admin"), addEntry);
 router.patch("/class/:classId/entries/:entryId", requireRole("admin"), updateEntry);

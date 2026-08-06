@@ -3,6 +3,7 @@ const Timetable = require("../models/Timetable");
 const Class = require("../models/Class");
 const Subject = require("../models/Subject");
 const TeacherProfile = require("../models/TeacherProfile");
+const StudentProfile = require("../models/StudentProfile");
 
 // "08:00" -> 480 (minutes since midnight) - makes overlap comparison a
 // simple numeric check instead of parsing strings repeatedly.
@@ -20,6 +21,27 @@ async function findAndPopulate(filter) {
     .populate("entries.subjectId", "name code")
     .populate("entries.teacherId", "fullName staffId");
 }
+
+// GET /api/v1/timetables/mine  (student only)
+// Resolves the student's own class server-side - same "no id needed, we
+// know who you are from the token" pattern as /submissions/mine etc.
+const getMyTimetable = asyncHandler(async (req, res) => {
+  const studentProfile = await StudentProfile.findOne({ schoolId: req.schoolId, userId: req.user.userId });
+  if (!studentProfile) {
+    res.status(404);
+    throw new Error("Student profile not found for this account");
+  }
+  if (!studentProfile.classId) {
+    return res.status(200).json({ success: true, data: { entries: [] } });
+  }
+
+  let timetable = await findAndPopulate({ classId: studentProfile.classId, schoolId: req.schoolId });
+  if (!timetable) {
+    return res.status(200).json({ success: true, data: { entries: [] } });
+  }
+
+  res.status(200).json({ success: true, data: timetable });
+});
 
 // GET /api/v1/timetables/class/:classId  (admin, teacher)
 // Returns the timetable for a class, creating an empty one on first request.
@@ -251,4 +273,4 @@ const deleteEntry = asyncHandler(async (req, res) => {
   res.status(200).json({ success: true, message: "Entry removed" });
 });
 
-module.exports = { getTimetableForClass, addEntry, updateEntry, deleteEntry };
+module.exports = { getTimetableForClass, getMyTimetable, addEntry, updateEntry, deleteEntry };
